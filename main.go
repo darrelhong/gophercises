@@ -23,6 +23,7 @@ func recoverMiddleware(next http.Handler, isDev bool) http.HandlerFunc {
 				stack := debug.Stack()
 				log.Println(string(stack))
 
+				w.WriteHeader(http.StatusInternalServerError)
 				if isDev {
 					fmt.Fprintf(w, "<h1>panic: %v</h1><pre>%s</pre>", err, string(stack))
 					return
@@ -32,8 +33,40 @@ func recoverMiddleware(next http.Handler, isDev bool) http.HandlerFunc {
 			}
 		}()
 
-		next.ServeHTTP(w, r)
+		newResponseWriter := &responseWriter{ResponseWriter: w}
+		next.ServeHTTP(newResponseWriter, r)
+		newResponseWriter.flush()
 	}
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	writes [][]byte
+	status int
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	rw.writes = append(rw.writes, b)
+	return len(b), nil
+}
+
+func (rw *responseWriter) WriteHeader(status int) {
+	rw.status = status
+}
+
+func (rw *responseWriter) flush() error {
+	if rw.status != 0 {
+		fmt.Println("sfsdfsdfsfsfsfsdfsd")
+		fmt.Println(rw.status)
+		rw.ResponseWriter.WriteHeader(rw.status)
+	}
+	for _, b := range rw.writes {
+		_, err := rw.ResponseWriter.Write(b)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func panicDemo(w http.ResponseWriter, r *http.Request) {
