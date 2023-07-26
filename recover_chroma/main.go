@@ -2,13 +2,16 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"runtime/debug"
 )
 
 func main() {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/", debugHandler)
 	mux.HandleFunc("/panic/", panicDemo)
 	mux.HandleFunc("/panic-after/", panicAfterDemo)
 	mux.HandleFunc("/", hello)
@@ -28,6 +31,16 @@ func devMw(app http.Handler) http.HandlerFunc {
 		}()
 		app.ServeHTTP(w, r)
 	}
+}
+
+func debugHandler(w http.ResponseWriter, r *http.Request) {
+	filePath := r.FormValue("path")
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	io.Copy(w, file)
 }
 
 func panicDemo(w http.ResponseWriter, r *http.Request) {
