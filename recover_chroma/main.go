@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/alecthomas/chroma/quick"
 )
@@ -29,7 +30,7 @@ func devMw(app http.Handler) http.HandlerFunc {
 				stack := debug.Stack()
 				log.Println(string(stack))
 				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "<h1>panic: %v</h1><pre>%s</pre>", err, string(stack))
+				fmt.Fprintf(w, "<h1>panic: %v</h1><pre>%s</pre>", err, makeLinks(string(stack)))
 			}
 		}()
 		app.ServeHTTP(w, r)
@@ -69,4 +70,19 @@ func funcThatPanics() {
 
 func hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "<h1>Hello!</h1>")
+}
+
+func makeLinks(stack string) string {
+	lines := strings.Split(stack, "\n")
+	for idx, line := range lines {
+		if len(line) != 0 && line[0] != '\t' {
+			continue
+		}
+		file := strings.TrimPrefix(strings.Split(line, ":")[0], "\t")
+		if len(file) == 0 {
+			continue
+		}
+		lines[idx] = "\t<a href=\"/debug/?path=" + file + "\">" + file + "</a>" + line[len(file)+1:]
+	}
+	return strings.Join(lines, "\n")
 }
