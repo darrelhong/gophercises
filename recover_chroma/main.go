@@ -6,11 +6,16 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 
+	"github.com/alecthomas/chroma/formatters/html"
+	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/quick"
+	"github.com/alecthomas/chroma/styles"
 )
 
 func main() {
@@ -39,6 +44,11 @@ func devMw(app http.Handler) http.HandlerFunc {
 
 func debugHandler(w http.ResponseWriter, r *http.Request) {
 	filePath := r.FormValue("path")
+	line := r.FormValue("line")
+	lineNum, err := strconv.Atoi(line)
+	if err != nil {
+		lineNum = -1
+	}
 	file, err := os.Open(filePath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -52,6 +62,17 @@ func debugHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	var highlighLines [][2]int
+	if lineNum > 0 {
+		highlighLines = append(highlighLines, [2]int{lineNum, lineNum})
+	}
+	formatter := html.New(html.WithLineNumbers(true), html.HighlightLines(highlighLines))
+	lexers := lexers.Get("go")
+	iterator, err := lexers.Tokenise(nil, b.String())
+	styles := styles.Get("nord")
+	w.Header().Set("Content-Type", "text/html")
+	formatter.Format(w, styles, iterator)
+
 	quick.Highlight(w, b.String(), "go", "html", "nord")
 }
 
@@ -78,11 +99,16 @@ func makeLinks(stack string) string {
 		if len(line) != 0 && line[0] != '\t' {
 			continue
 		}
-		file := strings.TrimPrefix(strings.Split(line, ":")[0], "\t")
+		lineArr := strings.Split(line, ":")
+		file := strings.TrimPrefix(lineArr[0], "\t")
 		if len(file) == 0 {
 			continue
 		}
-		lines[idx] = "\t<a href=\"/debug/?path=" + file + "\">" + file + "</a>" + line[len(file)+1:]
+		lineNum := strings.Split(lineArr[1], " ")[0]
+		query := url.Values{}
+		query.Set("path", file)
+		query.Set("line", lineNum)
+		lines[idx] = "\t<a href=\"/debug/?" + query.Encode() + "\">" + file + ":" + lineNum + "</a>" + line[len(file)+2+len(lineNum):]
 	}
 	return strings.Join(lines, "\n")
 }
