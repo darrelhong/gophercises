@@ -4,4 +4,5 @@ use (
 	./quiet_hn
 	./recover
 	./recover_chroma
+	./secret
 )
